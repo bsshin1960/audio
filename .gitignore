@@ -1,0 +1,17 @@
+.jdk17/
+.gradle/
+build/
+*.hprof
+local.properties
+*.iml
+.idea/
+*.apk
+*.ap_
+*.dex
+*.class
+bin/
+gen/
+out/
+captures/
+.externalNativeBuild/
+.cxx/
