@@ -38,14 +38,15 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    // 기기 오디오 권한 획득 처리
-                    var hasPermission by remember { mutableStateOf(checkAudioPermission()) }
+                    // 기기 오디오 및 비디오 권한 획득 처리
+                    var hasPermission by remember { mutableStateOf(checkMediaPermissions()) }
 
                     val permissionLauncher = rememberLauncherForActivityResult(
-                        contract = ActivityResultContracts.RequestPermission()
-                    ) { isGranted ->
-                        hasPermission = isGranted
-                        if (isGranted) {
+                        contract = ActivityResultContracts.RequestMultiplePermissions()
+                    ) { permissionsMap ->
+                        val allGranted = permissionsMap.values.all { it }
+                        hasPermission = allGranted
+                        if (allGranted) {
                             viewModel.initMediaController(applicationContext)
                         }
                     }
@@ -61,12 +62,18 @@ class MainActivity : ComponentActivity() {
                     } else {
                         PermissionRequiredScreen(
                             onRequestPermission = {
-                                val perm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                    Manifest.permission.READ_MEDIA_AUDIO
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    permissionLauncher.launch(
+                                        arrayOf(
+                                            Manifest.permission.READ_MEDIA_AUDIO,
+                                            Manifest.permission.READ_MEDIA_VIDEO
+                                        )
+                                    )
                                 } else {
-                                    Manifest.permission.READ_EXTERNAL_STORAGE
+                                    permissionLauncher.launch(
+                                        arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+                                    )
                                 }
-                                permissionLauncher.launch(perm)
                             }
                         )
                     }
@@ -75,13 +82,14 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun checkAudioPermission(): Boolean {
-        val perm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            Manifest.permission.READ_MEDIA_AUDIO
+    private fun checkMediaPermissions(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val audioGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_AUDIO) == PackageManager.PERMISSION_GRANTED
+            val videoGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED
+            audioGranted && videoGranted
         } else {
-            Manifest.permission.READ_EXTERNAL_STORAGE
+            ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
         }
-        return ContextCompat.checkSelfPermission(this, perm) == PackageManager.PERMISSION_GRANTED
     }
 }
 
