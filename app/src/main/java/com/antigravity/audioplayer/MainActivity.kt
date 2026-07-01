@@ -38,15 +38,22 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    // 기기 오디오 및 비디오 권한 획득 처리
-                    var hasPermission by remember { mutableStateOf(checkMediaPermissions()) }
+                    // 필수 오디오 권한 획득 처리 (비디오는 선택 사항)
+                    var hasPermission by remember { mutableStateOf(checkRequiredAudioPermission()) }
 
                     val permissionLauncher = rememberLauncherForActivityResult(
                         contract = ActivityResultContracts.RequestMultiplePermissions()
                     ) { permissionsMap ->
-                        val allGranted = permissionsMap.values.all { it }
-                        hasPermission = allGranted
-                        if (allGranted) {
+                        // 필수 권한인 오디오 권한이 허용되었는지 검사
+                        val audioPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            Manifest.permission.READ_MEDIA_AUDIO
+                        } else {
+                            Manifest.permission.READ_EXTERNAL_STORAGE
+                        }
+                        val audioGranted = permissionsMap[audioPermission] ?: false
+                        hasPermission = audioGranted
+                        
+                        if (audioGranted) {
                             viewModel.initMediaController(applicationContext)
                         }
                     }
@@ -82,14 +89,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun checkMediaPermissions(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val audioGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_AUDIO) == PackageManager.PERMISSION_GRANTED
-            val videoGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED
-            audioGranted && videoGranted
+    private fun checkRequiredAudioPermission(): Boolean {
+        val audioPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_AUDIO
         } else {
-            ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+            Manifest.permission.READ_EXTERNAL_STORAGE
         }
+        return ContextCompat.checkSelfPermission(this, audioPermission) == PackageManager.PERMISSION_GRANTED
     }
 }
 

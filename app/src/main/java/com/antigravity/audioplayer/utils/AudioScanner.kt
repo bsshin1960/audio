@@ -8,6 +8,10 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MediaItem
 import java.io.File
 
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
+import android.os.Build
+
 data class LocalSong(
     val id: Long,
     val title: String,
@@ -28,12 +32,28 @@ object AudioScanner {
         // 1. MediaStore.Audio.Media (오디오 파일 스캔)
         scanAudio(context, songs)
         
-        // 2. MediaStore.Video.Media (MP4 파일 스캔)
-        scanVideoAsAudio(context, songs)
+        // 2. MediaStore.Video.Media (MP4 파일 스캔 - 비디오 권한이 허용된 경우에만 실행)
+        if (hasVideoPermission(context)) {
+            scanVideoAsAudio(context, songs)
+        }
 
         // 가나다순 정렬
         songs.sortBy { it.title.lowercase() }
         return songs
+    }
+
+    private fun hasVideoPermission(context: Context): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.READ_MEDIA_VIDEO
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.READ_EXTERNAL_STORAGE
+            ) == PackageManager.PERMISSION_GRANTED
+        }
     }
 
     private fun scanAudio(context: Context, songs: MutableList<LocalSong>) {
