@@ -16,13 +16,27 @@ data class LocalSong(
     val duration: Long,
     val dataPath: String,
     val folderName: String,
-    val uri: Uri
+    val uri: Uri,
+    val isVideo: Boolean = false
 )
 
 object AudioScanner {
 
     fun scanAudioFiles(context: Context): List<LocalSong> {
         val songs = mutableListOf<LocalSong>()
+        
+        // 1. MediaStore.Audio.Media (오디오 파일 스캔)
+        scanAudio(context, songs)
+        
+        // 2. MediaStore.Video.Media (MP4 파일 스캔)
+        scanVideoAsAudio(context, songs)
+
+        // 가나다순 정렬
+        songs.sortBy { it.title.lowercase() }
+        return songs
+    }
+
+    private fun scanAudio(context: Context, songs: MutableList<LocalSong>) {
         val uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
         val projection = arrayOf(
             MediaStore.Audio.Media._ID,
@@ -33,11 +47,9 @@ object AudioScanner {
             MediaStore.Audio.Media.DATA
         )
 
-        // 오디오 파일만 필터링 (음악 파일 검색)
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
-        val sortOrder = "${MediaStore.Audio.Media.TITLE} ASC"
 
-        context.contentResolver.query(uri, projection, selection, null, sortOrder)?.use { cursor ->
+        context.contentResolver.query(uri, projection, selection, null, null)?.use { cursor ->
             val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
             val titleColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
             val artistColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
@@ -71,12 +83,68 @@ object AudioScanner {
                         duration = duration,
                         dataPath = dataPath,
                         folderName = folderName,
-                        uri = contentUri
+                        uri = contentUri,
+                        isVideo = false
                     )
                 )
             }
         }
-        return songs
+    }
+
+    private fun scanVideoAsAudio(context: Context, songs: MutableList<LocalSong>) {
+        val uri = MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        val projection = arrayOf(
+            MediaStore.Video.Media._ID,
+            MediaStore.Video.Media.TITLE,
+            MediaStore.Video.Media.ARTIST,
+            MediaStore.Video.Media.ALBUM,
+            MediaStore.Video.Media.DURATION,
+            MediaStore.Video.Media.DATA
+        )
+
+        // DATA(파일 경로)가 .mp4 로 끝나는 파일들을 수집
+        val selection = "${MediaStore.Video.Media.DATA} LIKE '%.mp4' OR ${MediaStore.Video.Media.DATA} LIKE '%.MP4'"
+
+        context.contentResolver.query(uri, projection, selection, null, null)?.use { cursor ->
+            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
+            val titleColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.TITLE)
+            val artistColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.ARTIST)
+            val albumColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.ALBUM)
+            val durationColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
+            val dataColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATA)
+
+            while (cursor.moveToNext()) {
+                val id = cursor.getLong(idColumn)
+                val title = cursor.getString(titleColumn) ?: "Unknown Video"
+                val artist = cursor.getString(artistColumn) ?: "동영상 음악"
+                val album = cursor.getString(albumColumn) ?: "비디오 앨범"
+                val duration = cursor.getLong(durationColumn)
+                val dataPath = cursor.getString(dataColumn) ?: ""
+
+                if (dataPath.isEmpty()) continue
+
+                val file = File(dataPath)
+                val folderName = file.parentFile?.name ?: "Root"
+                val contentUri = ContentUris.withAppendedId(
+                    MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                    id
+                )
+
+                songs.add(
+                    LocalSong(
+                        id = id,
+                        title = title,
+                        artist = artist,
+                        album = album,
+                        duration = duration,
+                        dataPath = dataPath,
+                        folderName = folderName,
+                        uri = contentUri,
+                        isVideo = true
+                    )
+                )
+            }
+        }
     }
 
     fun LocalSong.toMediaItem(): MediaItem {
@@ -88,8 +156,11 @@ object AudioScanner {
             .setIsPlayable(true)
             .build()
 
+        // 오디오 ID와 비디오 ID의 충돌을 방지하기 위해 비디오 파일은 접두사 추가
+        val uniqueMediaId = if (isVideo) "VIDEO_$id" else id.toString()
+
         return MediaItem.Builder()
-            .setMediaId(id.toString())
+            .setMediaId(uniqueMediaId)
             .setUri(uri)
             .setMediaMetadata(metadata)
             .build()
