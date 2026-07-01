@@ -56,6 +56,28 @@ class MainViewModel : ViewModel() {
     private val _selectedFolderName = MutableStateFlow<String?>(null)
     val selectedFolderName: StateFlow<String?> = _selectedFolderName
 
+    // 탐색기 관련 상수 정의
+    companion object {
+        const val MODE_FLAT = 0
+        const val MODE_EXPLORER = 1
+    }
+
+    // 0: Flat 폴더 뷰, 1: 계층형 파일 탐색기 뷰
+    private val _explorationMode = MutableStateFlow(MODE_FLAT)
+    val explorationMode: StateFlow<Int> = _explorationMode
+
+    // 탐색기 모드에서 현재 폴더 아래에 포함된 아이템(서브폴더, 곡) 목록
+    private val _explorerCurrentItems = MutableStateFlow<List<MediaItem>>(emptyList())
+    val explorerCurrentItems: StateFlow<List<MediaItem>> = _explorerCurrentItems
+
+    // 탐색 경로 히스토리 (상위 폴더 ID 스택)
+    private val _explorerPathHistory = MutableStateFlow<List<String>>(emptyList())
+    val explorerPathHistory: StateFlow<List<String>> = _explorerPathHistory
+
+    // 탐색기 모드에서 현재 깊이의 폴더명
+    private val _explorerCurrentDirName = MutableStateFlow<String?>("음악")
+    val explorerCurrentDirName: StateFlow<String?> = _explorerCurrentDirName
+
     private var positionUpdateJob: Job? = null
 
     @OptIn(UnstableApi::class)
@@ -71,6 +93,11 @@ class MainViewModel : ViewModel() {
                     _currentMediaItem.value = controller.currentMediaItem
                     _duration.value = controller.duration.coerceAtLeast(0L)
                     _isShuffleModeEnabled.value = controller.shuffleModeEnabled
+
+                    // 기본 재생 모드: 전체 반복(자동 다음 곡 재생) - 처음 연결 시에만 기본값 설정
+                    if (controller.repeatMode == Player.REPEAT_MODE_OFF) {
+                        controller.repeatMode = Player.REPEAT_MODE_ALL
+                    }
                     _repeatMode.value = controller.repeatMode
 
                     controller.addListener(object : Player.Listener {
@@ -117,6 +144,68 @@ class MainViewModel : ViewModel() {
         // MediaItemTree에서 가공된 폴더 구조 로드
         val folderItems = MediaItemTree.getChildren(MediaItemTree.FOLDERS_CATEGORY_ID)
         _folders.value = folderItems
+
+        // 파일 탐색기 초기 로드 (EXPLORER 카테고리 루트의 자식들)
+        loadExplorerItems(MediaItemTree.EXPLORER_CATEGORY_ID)
+    }
+
+    /**
+     * 탐색 모드를 토글하거나 특정 모드로 강제 설정
+     */
+    fun setExplorationMode(mode: Int) {
+        _explorationMode.value = mode
+    }
+
+    /**
+     * 특정 디렉토리 ID의 하위 목록을 탐색기 화면에 로드
+     */
+    private fun loadExplorerItems(directoryId: String) {
+        val children = MediaItemTree.getChildren(directoryId)
+        _explorerCurrentItems.value = children
+
+        val currentItem = MediaItemTree.getItem(directoryId)
+        _explorerCurrentDirName.value = if (directoryId == MediaItemTree.EXPLORER_CATEGORY_ID) {
+            "음악"
+        } else {
+            currentItem?.mediaMetadata?.title?.toString() ?: "파일 탐색기"
+        }
+    }
+
+    /**
+     * 탐색기에서 하위 폴더(디렉토리) 클릭 시 진입
+     */
+    fun enterDirectory(dirItem: MediaItem) {
+        val nextDirId = dirItem.mediaId
+        val currentHistory = _explorerPathHistory.value.toMutableList()
+        
+        // 현재 위치를 히스토리에 푸시
+        val currentDirId = if (currentHistory.isEmpty()) {
+            MediaItemTree.EXPLORER_CATEGORY_ID
+        } else {
+            currentHistory.last()
+        }
+        
+        if (currentDirId != nextDirId) {
+            currentHistory.add(currentDirId)
+            _explorerPathHistory.value = currentHistory
+        }
+
+        loadExplorerItems(nextDirId)
+    }
+
+    /**
+     * 탐색기에서 상위 디렉토리로 이동 (뒤로가기)
+     */
+    fun navigateUpExplorer(): Boolean {
+        val currentHistory = _explorerPathHistory.value.toMutableList()
+        if (currentHistory.isEmpty()) {
+            return false // 더 이상 뒤로 갈 상위 경로가 없음
+        }
+        
+        val previousDirId = currentHistory.removeAt(currentHistory.size - 1)
+        _explorerPathHistory.value = currentHistory
+        loadExplorerItems(previousDirId)
+        return true
     }
 
     fun selectFolder(folderItem: MediaItem) {

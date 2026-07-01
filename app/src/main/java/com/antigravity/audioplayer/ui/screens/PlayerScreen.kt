@@ -45,6 +45,15 @@ fun PlayerScreen(viewModel: MainViewModel) {
     val selectedFolderSongs by viewModel.songsInSelectedFolder.collectAsState()
     val selectedFolderName by viewModel.selectedFolderName.collectAsState()
     val currentSong by viewModel.currentMediaItem.collectAsState()
+    val isShuffle by viewModel.isShuffleModeEnabled.collectAsState()
+    val repeatMode by viewModel.repeatMode.collectAsState()
+    val isPlaying by viewModel.isPlaying.collectAsState()
+
+    // 신규 추가: 탐색기 모드 관련 상태 구독
+    val explorationMode by viewModel.explorationMode.collectAsState()
+    val explorerItems by viewModel.explorerCurrentItems.collectAsState()
+    val explorerPathHistory by viewModel.explorerPathHistory.collectAsState()
+    val explorerDirName by viewModel.explorerCurrentDirName.collectAsState()
 
     var isPlayerDetailOpen by remember { mutableStateOf(false) }
 
@@ -58,22 +67,61 @@ fun PlayerScreen(viewModel: MainViewModel) {
             )
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // 헤더 영역
-            HeaderSection(
-                title = selectedFolderName ?: "BsshinMusic",
-                showBackButton = selectedFolderName != null,
-                onBackClicked = { viewModel.clearFolderSelection() }
-            )
+            if (explorationMode == MainViewModel.MODE_FLAT) {
+                // 1. 기존 Flat 폴더 탐색 뷰
+                HeaderSection(
+                    title = selectedFolderName ?: "음악 라이브러리",
+                    showBackButton = selectedFolderName != null,
+                    onBackClicked = { viewModel.clearFolderSelection() },
+                    isShuffle = isShuffle,
+                    repeatMode = repeatMode,
+                    onShuffleClicked = { viewModel.toggleShuffle() },
+                    onRepeatClicked = { viewModel.toggleRepeatMode() }
+                )
 
-            // 폴더 목록 또는 곡 목록 표시
-            if (selectedFolderName == null) {
-                FolderList(folders = folders, onFolderClicked = { viewModel.selectFolder(it) })
+                // 모드 전환 탭 바
+                ExplorationModeTabBar(
+                    currentMode = explorationMode,
+                    onModeSelected = { viewModel.setExplorationMode(it) }
+                )
+
+                if (selectedFolderName == null) {
+                    FolderList(folders = folders, onFolderClicked = { viewModel.selectFolder(it) })
+                } else {
+                    SongList(
+                        songs = selectedFolderSongs,
+                        currentSong = currentSong,
+                        onSongClicked = { song ->
+                            viewModel.playSong(song, selectedFolderSongs)
+                        }
+                    )
+                }
             } else {
-                SongList(
-                    songs = selectedFolderSongs,
+                // 2. 신규 계층 파일 탐색기 뷰
+                HeaderSection(
+                    title = explorerDirName ?: "파일 탐색기",
+                    showBackButton = explorerPathHistory.isNotEmpty(),
+                    onBackClicked = { viewModel.navigateUpExplorer() },
+                    isShuffle = isShuffle,
+                    repeatMode = repeatMode,
+                    onShuffleClicked = { viewModel.toggleShuffle() },
+                    onRepeatClicked = { viewModel.toggleRepeatMode() }
+                )
+
+                // 모드 전환 탭 바
+                ExplorationModeTabBar(
+                    currentMode = explorationMode,
+                    onModeSelected = { viewModel.setExplorationMode(it) }
+                )
+
+                ExplorerList(
+                    items = explorerItems,
                     currentSong = currentSong,
+                    onDirClicked = { viewModel.enterDirectory(it) },
                     onSongClicked = { song ->
-                        viewModel.playSong(song, selectedFolderSongs)
+                        // 탐색기 내 현재 디렉토리 내부의 곡들만 추출해 재생 큐 구성
+                        val currentDirectorySongs = explorerItems.filter { it.mediaMetadata.isPlayable == true }
+                        viewModel.playSong(song, currentDirectorySongs)
                     }
                 )
             }
@@ -88,8 +136,14 @@ fun PlayerScreen(viewModel: MainViewModel) {
             ) {
                 MiniPlayerBar(
                     currentSong = currentSong!!,
-                    isPlaying = viewModel.isPlaying.collectAsState().value,
+                    isPlaying = isPlaying,
+                    isShuffle = isShuffle,
+                    repeatMode = repeatMode,
                     onPlayPauseClicked = { viewModel.playOrPause() },
+                    onPreviousClicked = { viewModel.skipToPrevious() },
+                    onNextClicked = { viewModel.skipToNext() },
+                    onShuffleClicked = { viewModel.toggleShuffle() },
+                    onRepeatClicked = { viewModel.toggleRepeatMode() },
                     onBarClicked = { isPlayerDetailOpen = true }
                 )
             }
@@ -113,36 +167,119 @@ fun PlayerScreen(viewModel: MainViewModel) {
 fun HeaderSection(
     title: String,
     showBackButton: Boolean,
-    onBackClicked: () -> Unit
+    onBackClicked: () -> Unit,
+    isShuffle: Boolean,
+    repeatMode: Int,
+    onShuffleClicked: () -> Unit,
+    onRepeatClicked: () -> Unit
 ) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 20.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 16.dp)
+            .padding(top = 16.dp, bottom = 8.dp)
     ) {
-        if (showBackButton) {
-            IconButton(
-                onClick = onBackClicked,
-                colors = IconButtonDefaults.iconButtonColors(contentColor = NeonCyan)
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                    contentDescription = "Back",
-                    modifier = Modifier.size(32.dp)
-                )
+        // 타이틀 행
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (showBackButton) {
+                IconButton(
+                    onClick = onBackClicked,
+                    colors = IconButtonDefaults.iconButtonColors(contentColor = NeonCyan)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                        contentDescription = "Back",
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(4.dp))
             }
-            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = title,
+                color = BrightWhite,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
         }
 
+        // 재생 모드 퀵 메뉴 행
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // 재생 모드 라벨
+            Text(
+                text = "재생 모드:",
+                color = SoftGrey,
+                fontSize = 12.sp
+            )
+
+            // 셔플 버튼
+            PlayModeChip(
+                label = "랜덤",
+                icon = Icons.Filled.Shuffle,
+                isActive = isShuffle,
+                onClick = onShuffleClicked
+            )
+
+            // 반복 모드 버튼 (OFF → ALL → ONE 순환)
+            val repeatLabel = when (repeatMode) {
+                Player.REPEAT_MODE_ALL -> "전체반복"
+                Player.REPEAT_MODE_ONE -> "한곡반복"
+                else -> "반복없음"
+            }
+            val repeatIcon = when (repeatMode) {
+                Player.REPEAT_MODE_ONE -> Icons.Filled.RepeatOne
+                else -> Icons.Filled.Repeat
+            }
+            PlayModeChip(
+                label = repeatLabel,
+                icon = repeatIcon,
+                isActive = repeatMode != Player.REPEAT_MODE_OFF,
+                onClick = onRepeatClicked
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+    }
+}
+
+@Composable
+fun PlayModeChip(
+    label: String,
+    icon: ImageVector,
+    isActive: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(if (isActive) NeonCyanDim else DarkGrey)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = if (isActive) NeonCyan else SoftGrey,
+            modifier = Modifier.size(14.dp)
+        )
         Text(
-            text = title,
-            color = BrightWhite,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            text = label,
+            color = if (isActive) NeonCyan else SoftGrey,
+            fontSize = 12.sp,
+            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal
         )
     }
 }
@@ -298,54 +435,134 @@ fun SongRow(
 fun MiniPlayerBar(
     currentSong: MediaItem,
     isPlaying: Boolean,
+    isShuffle: Boolean,
+    repeatMode: Int,
     onPlayPauseClicked: () -> Unit,
+    onPreviousClicked: () -> Unit,
+    onNextClicked: () -> Unit,
+    onShuffleClicked: () -> Unit,
+    onRepeatClicked: () -> Unit,
     onBarClicked: () -> Unit
 ) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .height(64.dp)
             .shadow(12.dp, RoundedCornerShape(20.dp))
             .clip(RoundedCornerShape(20.dp))
             .background(DarkGrey)
             .clickable(onClick = onBarClicked)
-            .padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 14.dp, vertical = 10.dp)
     ) {
-        Icon(
-            imageVector = Icons.Filled.MusicNote,
-            contentDescription = null,
-            tint = NeonCyan,
-            modifier = Modifier.size(28.dp)
-        )
-
-        Spacer(modifier = Modifier.width(12.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = currentSong.mediaMetadata.title.toString(),
-                color = BrightWhite,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = currentSong.mediaMetadata.artist.toString(),
-                color = SoftGrey,
-                fontSize = 12.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-
-        IconButton(onClick = onPlayPauseClicked) {
+        // 상단 행: 곡 정보
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Icon(
-                imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                imageVector = Icons.Filled.MusicNote,
                 contentDescription = null,
                 tint = NeonCyan,
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.size(22.dp)
             )
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = currentSong.mediaMetadata.title.toString(),
+                    color = BrightWhite,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = currentSong.mediaMetadata.artist.toString(),
+                    color = SoftGrey,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 하단 행: 재생 컨트롤 버튼 전체
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceAround,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 셔플
+            IconButton(
+                onClick = { onShuffleClicked() },
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Shuffle,
+                    contentDescription = "셔플",
+                    tint = if (isShuffle) NeonCyan else SoftGrey,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            // 이전 곡
+            IconButton(
+                onClick = { onPreviousClicked() },
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.SkipPrevious,
+                    contentDescription = "이전 곡",
+                    tint = BrightWhite,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+
+            // 재생/일시정지
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(NeonCyan)
+                    .clickable { onPlayPauseClicked() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    contentDescription = null,
+                    tint = DeepBlack,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
+            // 다음 곡
+            IconButton(
+                onClick = { onNextClicked() },
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.SkipNext,
+                    contentDescription = "다음 곡",
+                    tint = BrightWhite,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+
+            // 반복 모드
+            val repeatIcon = when (repeatMode) {
+                Player.REPEAT_MODE_ONE -> Icons.Filled.RepeatOne
+                else -> Icons.Filled.Repeat
+            }
+            IconButton(
+                onClick = { onRepeatClicked() },
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = repeatIcon,
+                    contentDescription = "반복",
+                    tint = if (repeatMode != Player.REPEAT_MODE_OFF) NeonCyan else SoftGrey,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
     }
 }
@@ -541,3 +758,150 @@ private fun formatTime(ms: Long): String {
     val seconds = totalSeconds % 60
     return String.format("%02d:%02d", minutes, seconds)
 }
+
+@Composable
+fun ExplorationModeTabBar(
+    currentMode: Int,
+    onModeSelected: (Int) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(DarkGrey)
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly
+    ) {
+        val flatActive = currentMode == MainViewModel.MODE_FLAT
+        val explorerActive = currentMode == MainViewModel.MODE_EXPLORER
+
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (flatActive) NeonCyanDim else Color.Transparent)
+                .clickable { onModeSelected(MainViewModel.MODE_FLAT) }
+                .padding(vertical = 8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "폴더 앨범",
+                color = if (flatActive) NeonCyan else SoftGrey,
+                fontSize = 14.sp,
+                fontWeight = if (flatActive) FontWeight.Bold else FontWeight.Normal
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (explorerActive) NeonCyanDim else Color.Transparent)
+                .clickable { onModeSelected(MainViewModel.MODE_EXPLORER) }
+                .padding(vertical = 8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "파일 탐색기",
+                color = if (explorerActive) NeonCyan else SoftGrey,
+                fontSize = 14.sp,
+                fontWeight = if (explorerActive) FontWeight.Bold else FontWeight.Normal
+            )
+        }
+    }
+}
+
+@Composable
+fun ExplorerList(
+    items: List<MediaItem>,
+    currentSong: MediaItem?,
+    onDirClicked: (MediaItem) -> Unit,
+    onSongClicked: (MediaItem) -> Unit
+) {
+    if (items.isEmpty()) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "이 폴더는 비어있습니다.",
+                color = SoftGrey,
+                fontSize = 16.sp
+            )
+        }
+    } else {
+        LazyColumn(
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            items(items) { item ->
+                val isDir = item.mediaMetadata.isPlayable != true
+                val isSelected = currentSong?.mediaId == item.mediaId
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (isSelected) NeonCyanDim else DarkGrey.copy(alpha = 0.6f))
+                        .clickable {
+                            if (isDir) {
+                                onDirClicked(item)
+                            } else {
+                                onSongClicked(item)
+                            }
+                        }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = if (isDir) Icons.Filled.Folder else Icons.Filled.MusicNote,
+                        contentDescription = null,
+                        tint = if (isDir) NeonCyan else (if (isSelected) NeonCyan else SoftGrey),
+                        modifier = Modifier.size(24.dp)
+                    )
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = item.mediaMetadata.title.toString(),
+                            color = if (isSelected) NeonCyan else BrightWhite,
+                            fontSize = 15.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (!isDir) {
+                            Text(
+                                text = item.mediaMetadata.artist.toString(),
+                                color = SoftGrey,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        } else {
+                            Text(
+                                text = "폴더 열기",
+                                color = SoftGrey.copy(alpha = 0.8f),
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+
+                    if (isDir) {
+                        Icon(
+                            imageVector = Icons.Filled.ChevronRight,
+                            contentDescription = null,
+                            tint = SoftGrey,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+            // 미니 플레이어 가림 방지 패딩
+            item { Spacer(modifier = Modifier.height(100.dp)) }
+        }
+    }
+}
+
