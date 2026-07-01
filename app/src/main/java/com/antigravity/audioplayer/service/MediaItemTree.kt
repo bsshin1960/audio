@@ -110,7 +110,9 @@ object MediaItemTree {
     private fun buildExplorerTree() {
         // 이미 생성된 음악 MediaItem 목록 재활용
         for (song in allSongs) {
-            val songItem = treeMap[song.id.toString()] ?: continue
+            // 중요: 비디오 파일은 "VIDEO_" 접두사가 붙어있으므로 ID 매핑 분기 처리 필수
+            val uniqueMediaId = if (song.isVideo) "VIDEO_${song.id}" else song.id.toString()
+            val songItem = treeMap[uniqueMediaId] ?: continue
             val file = File(song.dataPath)
             val parentFile = file.parentFile ?: continue
 
