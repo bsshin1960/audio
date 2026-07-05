@@ -3,7 +3,7 @@
 > **프로젝트**: Android Auto 음악 플레이어 앱  
 > **패키지명**: `com.antigravity.audioplayer`  
 > **GitHub**: https://github.com/bsshin1960/audio  
-> **최종 업데이트**: 2026-06-26
+> **최종 업데이트**: 2026-07-05
 
 ---
 
@@ -154,6 +154,18 @@ $env:JAVA_HOME = "C:\Temp\Antigrvity\audio\.jdk17\jdk-17.0.11+9"
 - **원인**: `PlayerScreen.kt`와 `MediaItemTree.kt`에 하드코딩된 문자열
 - **해결**: 모든 위치에서 "BsshinMusic"으로 변경
 
+### 문제 5: 탭 순서 변경 및 타이틀 명칭 단순화
+- **원인**: 차량 및 스마트폰 탐색 메뉴에서 "음악 폴더 (기본)"와 "파일 탐색기"의 순서 조정 요구 및 보다 단순한 명칭 선호.
+- **해결**: `MediaItemTree.kt`와 `PlayerScreen.kt`에서 타이틀을 "음악 폴더"로 축소 수정하고, 루트 카테고리/탭 바의 선언 순서를 뒤바꾸어 "파일 탐색기"가 첫 번째(좌측), "음악 폴더"가 두 번째(우측)에 오도록 수정. 또한 스마트폰 진입 시 기본 선택 탭을 `MODE_EXPLORER`로 변경.
+
+### 문제 6: 다중 ADB 디바이스 연결 오류 해결
+- **원인**: 개발 PC 환경에 미동작/오프라인 에뮬레이터(`emulator-5574` 등)가 백그라운드에 생성되어 있을 때, `adb` 명령어 실행 시 `more than one device/emulator` 오류 발생 및 연결 중단.
+- **해결**: `start_dhu.bat` 및 adb 포트 포워딩 명령어 전체에 명시적 디바이스 아이디 플래그(`-s R3CWC0FS23Y`)를 지정하여 실 디바이스에 타겟 고정.
+
+### 문제 7: 실차 네비게이션 미연결 (앱 아이콘 미출시)
+- **원인**: 안드로이드 오토 보안 정책 상 플레이스토어를 통하지 않고 수동 설치(sideload)한 개발용 디버그 빌드는 기본적으로 런처에서 가려짐.
+- **해결**: 스마트폰 Android Auto 설정 내에서 개발자 모드 진입 후 **"출처를 알 수 없는 앱 (Unknown sources)"** 옵션을 활성화하여 연동 성공.
+
 ---
 
 ## 🚀 향후 개선 사항
@@ -164,3 +176,4 @@ $env:JAVA_HOME = "C:\Temp\Antigrvity\audio\.jdk17\jdk-17.0.11+9"
 - [ ] 셔플/반복 재생 UI 개선
 - [ ] 차량 내 음성 명령(Voice Action) 지원
 - [ ] Release 빌드 후 Play Store 배포
+
