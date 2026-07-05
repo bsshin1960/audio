@@ -49,7 +49,7 @@ object MediaItemTree {
 
         // 3. "음악 폴더" 카테고리 아이템 생성 (기존 Flat 뷰)
         val foldersCategoryMetadata = MediaMetadata.Builder()
-            .setTitle("음악 폴더 (기본)")
+            .setTitle("음악 폴더")
             .setFolderType(MediaMetadata.FOLDER_TYPE_TITLES)
             .setIsPlayable(false)
             .build()
@@ -72,8 +72,8 @@ object MediaItemTree {
         treeMap[EXPLORER_CATEGORY_ID] = explorerCategoryItem
 
         // 루트의 자식으로 카테고리 2종 추가
-        parentToChildrenMap.getOrPut(ROOT_ID) { mutableListOf() }.add(foldersCategoryItem)
         parentToChildrenMap.getOrPut(ROOT_ID) { mutableListOf() }.add(explorerCategoryItem)
+        parentToChildrenMap.getOrPut(ROOT_ID) { mutableListOf() }.add(foldersCategoryItem)
 
         // 5. 기본 평탄화 폴더(Flat Folders) 그룹화 진행
         val foldersGrouped = allSongs.groupBy { it.folderName }

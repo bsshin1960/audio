@@ -63,7 +63,7 @@ class MainViewModel : ViewModel() {
     }
 
     // 0: Flat 폴더 뷰, 1: 계층형 파일 탐색기 뷰
-    private val _explorationMode = MutableStateFlow(MODE_FLAT)
+    private val _explorationMode = MutableStateFlow(MODE_EXPLORER)
     val explorationMode: StateFlow<Int> = _explorationMode
 
     // 탐색기 모드에서 현재 폴더 아래에 포함된 아이템(서브폴더, 곡) 목록

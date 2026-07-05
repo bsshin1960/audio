@@ -780,23 +780,6 @@ fun ExplorationModeTabBar(
             modifier = Modifier
                 .weight(1f)
                 .clip(RoundedCornerShape(8.dp))
-                .background(if (flatActive) NeonCyanDim else Color.Transparent)
-                .clickable { onModeSelected(MainViewModel.MODE_FLAT) }
-                .padding(vertical = 8.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = "폴더 앨범",
-                color = if (flatActive) NeonCyan else SoftGrey,
-                fontSize = 14.sp,
-                fontWeight = if (flatActive) FontWeight.Bold else FontWeight.Normal
-            )
-        }
-
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .clip(RoundedCornerShape(8.dp))
                 .background(if (explorerActive) NeonCyanDim else Color.Transparent)
                 .clickable { onModeSelected(MainViewModel.MODE_EXPLORER) }
                 .padding(vertical = 8.dp),
@@ -807,6 +790,23 @@ fun ExplorationModeTabBar(
                 color = if (explorerActive) NeonCyan else SoftGrey,
                 fontSize = 14.sp,
                 fontWeight = if (explorerActive) FontWeight.Bold else FontWeight.Normal
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (flatActive) NeonCyanDim else Color.Transparent)
+                .clickable { onModeSelected(MainViewModel.MODE_FLAT) }
+                .padding(vertical = 8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "음악 폴더",
+                color = if (flatActive) NeonCyan else SoftGrey,
+                fontSize = 14.sp,
+                fontWeight = if (flatActive) FontWeight.Bold else FontWeight.Normal
             )
         }
     }

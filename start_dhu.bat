@@ -4,7 +4,7 @@ echo  GravityMusic DHU (Android Auto - Palisades Wide Layout)
 echo ==========================================================
 echo.
 
-set ADB_PATH="C:\Temp\Antigrvity\sbstasker\.build-env\android-sdk\platform-tools\adb.exe"
+set ADB_PATH="C:\Temp\Antigrvity\sbstasker\.build-env\android-sdk\platform-tools\adb.exe" -s R3CWC0FS23Y
 set DHU_DIR="C:\Temp\Antigrvity\sbstasker\.build-env\android-sdk\extras\google\auto"
 
 echo [1/5] Checking smartphone connection...
