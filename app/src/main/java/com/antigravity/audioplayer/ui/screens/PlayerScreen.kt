@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -225,12 +226,15 @@ fun HeaderSection(
             )
 
             // 셔플 버튼
-            PlayModeChip(
-                label = "랜덤",
-                icon = Icons.Filled.Shuffle,
-                isActive = isShuffle,
-                onClick = onShuffleClicked
-            )
+            val shuffleTooltipText = if (isShuffle) "랜덤 듣기 (켜짐)" else "순차 재생 (랜덤 듣기 꺼짐)"
+            PlaybackTooltip(tooltipText = shuffleTooltipText) {
+                PlayModeChip(
+                    label = "랜덤",
+                    icon = Icons.Filled.Shuffle,
+                    isActive = isShuffle,
+                    onClick = onShuffleClicked
+                )
+            }
 
             // 반복 모드 버튼 (OFF → ALL → ONE 순환)
             val repeatLabel = when (repeatMode) {
@@ -242,12 +246,19 @@ fun HeaderSection(
                 Player.REPEAT_MODE_ONE -> Icons.Filled.RepeatOne
                 else -> Icons.Filled.Repeat
             }
-            PlayModeChip(
-                label = repeatLabel,
-                icon = repeatIcon,
-                isActive = repeatMode != Player.REPEAT_MODE_OFF,
-                onClick = onRepeatClicked
-            )
+            val repeatTooltipText = when (repeatMode) {
+                Player.REPEAT_MODE_ONE -> "반복 듣기 (한 곡 반복)"
+                Player.REPEAT_MODE_ALL -> "연속 듣기 (전체 반복)"
+                else -> "연속 재생 (반복 없음)"
+            }
+            PlaybackTooltip(tooltipText = repeatTooltipText) {
+                PlayModeChip(
+                    label = repeatLabel,
+                    icon = repeatIcon,
+                    isActive = repeatMode != Player.REPEAT_MODE_OFF,
+                    onClick = onRepeatClicked
+                )
+            }
         }
         Spacer(modifier = Modifier.height(8.dp))
     }
@@ -492,16 +503,19 @@ fun MiniPlayerBar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // 셔플
-            IconButton(
-                onClick = { onShuffleClicked() },
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Shuffle,
-                    contentDescription = "셔플",
-                    tint = if (isShuffle) NeonCyan else SoftGrey,
-                    modifier = Modifier.size(20.dp)
-                )
+            val shuffleTooltipText = if (isShuffle) "랜덤 듣기 (켜짐)" else "순차 재생 (랜덤 듣기 꺼짐)"
+            PlaybackTooltip(tooltipText = shuffleTooltipText) {
+                IconButton(
+                    onClick = { onShuffleClicked() },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Shuffle,
+                        contentDescription = "셔플",
+                        tint = if (isShuffle) NeonCyan else SoftGrey,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
 
             // 이전 곡
@@ -552,16 +566,23 @@ fun MiniPlayerBar(
                 Player.REPEAT_MODE_ONE -> Icons.Filled.RepeatOne
                 else -> Icons.Filled.Repeat
             }
-            IconButton(
-                onClick = { onRepeatClicked() },
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(
-                    imageVector = repeatIcon,
-                    contentDescription = "반복",
-                    tint = if (repeatMode != Player.REPEAT_MODE_OFF) NeonCyan else SoftGrey,
-                    modifier = Modifier.size(20.dp)
-                )
+            val repeatTooltipText = when (repeatMode) {
+                Player.REPEAT_MODE_ONE -> "반복 듣기 (한 곡 반복)"
+                Player.REPEAT_MODE_ALL -> "연속 듣기 (전체 반복)"
+                else -> "연속 재생 (반복 없음)"
+            }
+            PlaybackTooltip(tooltipText = repeatTooltipText) {
+                IconButton(
+                    onClick = { onRepeatClicked() },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = repeatIcon,
+                        contentDescription = "반복",
+                        tint = if (repeatMode != Player.REPEAT_MODE_OFF) NeonCyan else SoftGrey,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
     }
@@ -687,13 +708,16 @@ fun PlayerDetailScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // 셔플 토글 버튼
-            IconButton(onClick = { viewModel.toggleShuffle() }) {
-                Icon(
-                    imageVector = Icons.Filled.Shuffle,
-                    contentDescription = null,
-                    tint = if (isShuffle) NeonCyan else SoftGrey,
-                    modifier = Modifier.size(28.dp)
-                )
+            val shuffleTooltipText = if (isShuffle) "랜덤 듣기 (켜짐)" else "순차 재생 (랜덤 듣기 꺼짐)"
+            PlaybackTooltip(tooltipText = shuffleTooltipText) {
+                IconButton(onClick = { viewModel.toggleShuffle() }) {
+                    Icon(
+                        imageVector = Icons.Filled.Shuffle,
+                        contentDescription = null,
+                        tint = if (isShuffle) NeonCyan else SoftGrey,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
             }
 
             // 이전 곡
@@ -738,13 +762,20 @@ fun PlayerDetailScreen(
                 Player.REPEAT_MODE_ONE -> Icons.Filled.RepeatOne
                 else -> Icons.Filled.Repeat
             }
-            IconButton(onClick = { viewModel.toggleRepeatMode() }) {
-                Icon(
-                    imageVector = repeatIcon,
-                    contentDescription = null,
-                    tint = if (repeatMode != Player.REPEAT_MODE_OFF) NeonCyan else SoftGrey,
-                    modifier = Modifier.size(28.dp)
-                )
+            val repeatTooltipText = when (repeatMode) {
+                Player.REPEAT_MODE_ONE -> "반복 듣기 (한 곡 반복)"
+                Player.REPEAT_MODE_ALL -> "연속 듣기 (전체 반복)"
+                else -> "연속 재생 (반복 없음)"
+            }
+            PlaybackTooltip(tooltipText = repeatTooltipText) {
+                IconButton(onClick = { viewModel.toggleRepeatMode() }) {
+                    Icon(
+                        imageVector = repeatIcon,
+                        contentDescription = null,
+                        tint = if (repeatMode != Player.REPEAT_MODE_OFF) NeonCyan else SoftGrey,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
             }
         }
         Spacer(modifier = Modifier.height(16.dp))
@@ -903,5 +934,27 @@ fun ExplorerList(
             item { Spacer(modifier = Modifier.height(100.dp)) }
         }
     }
+}
+
+// 마우스 호버 시 툴팁을 표시해 주는 래퍼 컴포저블
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PlaybackTooltip(
+    tooltipText: String,
+    content: @Composable () -> Unit
+) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = {
+            PlainTooltip(
+                containerColor = DarkGrey,
+                contentColor = BrightWhite
+            ) {
+                Text(text = tooltipText)
+            }
+        },
+        state = rememberTooltipState(),
+        content = content
+    )
 }
 

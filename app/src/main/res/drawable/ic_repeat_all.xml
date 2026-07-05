@@ -7,8 +7,8 @@
     <path
         android:fillColor="#00F0FF"
         android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zm0,18c-4.42,0 -8,-3.58 -8,-8s3.58,-8 8,-8 8,3.58 8,8 -3.58,8 -8,8z"/>
-    <!-- Repeat One Paths -->
+    <!-- Repeat Paths -->
     <path
         android:fillColor="#00F0FF"
-        android:pathData="M7,7h10v3l4,-4 -4,-4v3H5v6h2V7zm10,10H7v-3l-4,4 4,4v-3h12v-6h-2v4zM13,15v-6h-1l-2,1v1h1.5v4H13z"/>
+        android:pathData="M7,7h10v3l4,-4 -4,-4v3H5v6h2V7zm10,10H7v-3l-4,4 4,4v-3h12v-6h-2v4z"/>
 </vector>

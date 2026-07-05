@@ -1,8 +1,10 @@
 package com.antigravity.audioplayer.service
 
 import android.os.Bundle
+import java.io.File
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
+import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -49,9 +51,21 @@ class AudioPlaybackService : MediaLibraryService() {
             .build()
         exoPlayer = exoplayer
 
+        val forwardingPlayer = object : ForwardingPlayer(exoplayer) {
+            override fun seekToPrevious() {
+                // 이전 곡 버튼을 누르면 현재 재생 위치와 상관없이 무조건 이전 곡으로 이동
+                super.seekToPreviousMediaItem()
+            }
+
+            override fun seekToNext() {
+                // 다음 곡 버튼을 누르면 다음 곡으로 이동
+                super.seekToNextMediaItem()
+            }
+        }
+
         // 3. MediaLibrarySession 생성
         val callback = CustomSessionCallback()
-        mediaLibrarySession = MediaLibrarySession.Builder(this, exoplayer, callback)
+        mediaLibrarySession = MediaLibrarySession.Builder(this, forwardingPlayer, callback)
             .build()
 
         // 4. 플레이어 상태 변경 시 안드로이드 오토 버튼 레이아웃 갱신
@@ -85,7 +99,7 @@ class AudioPlaybackService : MediaLibraryService() {
         // 셔플 버튼: 현재 상태(ON/OFF)를 표시 이름으로 알림
         val shuffleButton = CommandButton.Builder()
             .setDisplayName(if (shuffleEnabled) "셔플 켜짐" else "셔플 끄기")
-            .setIconResId(R.drawable.ic_shuffle)
+            .setIconResId(if (shuffleEnabled) R.drawable.ic_shuffle_on else R.drawable.ic_shuffle_off)
             .setSessionCommand(SessionCommand(CUSTOM_CMD_TOGGLE_SHUFFLE, Bundle.EMPTY))
             .build()
 
@@ -99,8 +113,11 @@ class AudioPlaybackService : MediaLibraryService() {
                 }
             )
             .setIconResId(
-                if (repeatMode == Player.REPEAT_MODE_ONE) R.drawable.ic_repeat_one
-                else R.drawable.ic_repeat
+                when (repeatMode) {
+                    Player.REPEAT_MODE_ONE -> R.drawable.ic_repeat_one
+                    Player.REPEAT_MODE_ALL -> R.drawable.ic_repeat_all
+                    else -> R.drawable.ic_repeat_off
+                }
             )
             .setSessionCommand(SessionCommand(CUSTOM_CMD_TOGGLE_REPEAT, Bundle.EMPTY))
             .build()
@@ -139,8 +156,12 @@ class AudioPlaybackService : MediaLibraryService() {
                     .add(SessionCommand(CUSTOM_CMD_TOGGLE_SHUFFLE, Bundle.EMPTY))
                     .add(SessionCommand(CUSTOM_CMD_TOGGLE_REPEAT, Bundle.EMPTY))
                     .build()
+            val playerCommands = Player.Commands.Builder()
+                .addAllCommands()
+                .build()
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailableSessionCommands(sessionCommands)
+                .setAvailablePlayerCommands(playerCommands)
                 .build()
         }
 
@@ -211,23 +232,149 @@ class AudioPlaybackService : MediaLibraryService() {
             )
         }
 
+        override fun onSetMediaItems(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            mediaItems: MutableList<MediaItem>,
+            startIndex: Int,
+            startPositionMs: Long
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+            android.util.Log.d("GravityMusic", "onSetMediaItems: size = ${mediaItems.size}, firstId = ${mediaItems.firstOrNull()?.mediaId}, startIndex = $startIndex")
+            val updatedItems = mutableListOf<MediaItem>()
+            var updatedStartIndex = startIndex
+
+            if (mediaItems.size == 1) {
+                val item = mediaItems[0]
+                val mediaId = item.mediaId
+
+                if (mediaId.startsWith("[FOLDER_]") || mediaId.startsWith("[EXP_DIR_]")) {
+                    collectSongsRecursively(mediaId, updatedItems)
+                    updatedStartIndex = 0
+                } else {
+                    // 단일 곡 선택 시, 해당 곡이 속한 폴더의 전체 곡을 큐에 삽입
+                    val fullItem = MediaItemTree.getItem(mediaId) ?: item
+                    val path = MediaItemTree.getSongPath(mediaId)
+                    android.util.Log.d("GravityMusic", "onSetMediaItems: song path = $path")
+                    if (path != null) {
+                        val parentFile = File(path).parentFile
+                        val expDirId = parentFile?.let { "[EXP_DIR_]${it.absolutePath}" }
+                        val flatFolderId = parentFile?.let { "[FOLDER_]${it.name}" }
+
+                        // 계층 탐색기 디렉토리 또는 Flat 폴더 내 곡들 목록 조회
+                        val siblingItems = when {
+                            expDirId != null && MediaItemTree.getChildren(expDirId).isNotEmpty() -> {
+                                MediaItemTree.getChildren(expDirId).filter { it.mediaMetadata.isPlayable == true }
+                            }
+                            flatFolderId != null && MediaItemTree.getChildren(flatFolderId).isNotEmpty() -> {
+                                MediaItemTree.getChildren(flatFolderId)
+                            }
+                            else -> emptyList()
+                        }
+                        android.util.Log.d("GravityMusic", "onSetMediaItems: siblings count = ${siblingItems.size}")
+
+                        if (siblingItems.isNotEmpty()) {
+                            updatedItems.addAll(siblingItems)
+                            val idx = siblingItems.indexOfFirst { it.mediaId == mediaId }
+                            updatedStartIndex = if (idx >= 0) idx else 0
+                        } else {
+                            updatedItems.add(fullItem)
+                            updatedStartIndex = 0
+                        }
+                    } else {
+                        updatedItems.add(fullItem)
+                        updatedStartIndex = 0
+                    }
+                }
+            } else {
+                // 여러 곡이 전달된 경우 (예: 스마트폰 Compose UI에서 큐 전달 시) 각 아이템 상세 정보 로드
+                for (item in mediaItems) {
+                    val fullItem = MediaItemTree.getItem(item.mediaId) ?: item
+                    updatedItems.add(fullItem)
+                }
+            }
+
+            android.util.Log.d("GravityMusic", "onSetMediaItems: returning size = ${updatedItems.size}, startIndex = $updatedStartIndex")
+            return Futures.immediateFuture(
+                MediaSession.MediaItemsWithStartPosition(
+                    updatedItems,
+                    updatedStartIndex,
+                    startPositionMs
+                )
+            )
+        }
+
         // 재생 아이템 추가 요청 처리 (안드로이드 오토에서 특정 곡이나 폴더를 탭했을 때)
         override fun onAddMediaItems(
             mediaSession: MediaSession,
             controller: MediaSession.ControllerInfo,
             mediaItems: MutableList<MediaItem>
         ): ListenableFuture<MutableList<MediaItem>> {
+            android.util.Log.d("GravityMusic", "onAddMediaItems: size = ${mediaItems.size}, firstId = ${mediaItems.firstOrNull()?.mediaId}")
             val updatedItems = mutableListOf<MediaItem>()
-            for (item in mediaItems) {
-                if (item.mediaId.startsWith("[FOLDER_]") || item.mediaId.startsWith("[EXP_DIR_]")) {
-                    val folderSongs = mutableListOf<MediaItem>()
-                    collectSongsRecursively(item.mediaId, folderSongs)
-                    updatedItems.addAll(folderSongs)
+
+            if (mediaItems.size == 1) {
+                val item = mediaItems[0]
+                val mediaId = item.mediaId
+
+                if (mediaId.startsWith("[FOLDER_]") || mediaId.startsWith("[EXP_DIR_]")) {
+                    collectSongsRecursively(mediaId, updatedItems)
                 } else {
-                    val fullItem = MediaItemTree.getItem(item.mediaId) ?: item
-                    updatedItems.add(fullItem)
+                    // 단일 곡 선택 시, 해당 곡이 속한 폴더의 전체 곡을 큐에 삽입 (레거시/안드로이드 오토 대응)
+                    val fullItem = MediaItemTree.getItem(mediaId) ?: item
+                    val path = MediaItemTree.getSongPath(mediaId)
+                    android.util.Log.d("GravityMusic", "onAddMediaItems: song path = $path")
+                    if (path != null) {
+                        val parentFile = File(path).parentFile
+                        val expDirId = parentFile?.let { "[EXP_DIR_]${it.absolutePath}" }
+                        val flatFolderId = parentFile?.let { "[FOLDER_]${it.name}" }
+
+                        // 계층 탐색기 디렉토리 또는 Flat 폴더 내 곡들 목록 조회
+                        val siblingItems = when {
+                            expDirId != null && MediaItemTree.getChildren(expDirId).isNotEmpty() -> {
+                                MediaItemTree.getChildren(expDirId).filter { it.mediaMetadata.isPlayable == true }
+                            }
+                            flatFolderId != null && MediaItemTree.getChildren(flatFolderId).isNotEmpty() -> {
+                                MediaItemTree.getChildren(flatFolderId)
+                            }
+                            else -> emptyList()
+                        }
+                        android.util.Log.d("GravityMusic", "onAddMediaItems: siblings count = ${siblingItems.size}")
+
+                        if (siblingItems.isNotEmpty()) {
+                            // 선택한 곡을 첫 번째(index 0)로 배치하고, 그 다음 곡들을 순차적으로 배치 (순환 구조)
+                            val idx = siblingItems.indexOfFirst { it.mediaId == mediaId }
+                            if (idx >= 0) {
+                                // 선택한 곡 추가
+                                updatedItems.add(siblingItems[idx])
+                                // 그 이후 곡들 추가
+                                for (i in (idx + 1) until siblingItems.size) {
+                                    updatedItems.add(siblingItems[i])
+                                }
+                                // 그 이전 곡들 추가 (순환)
+                                for (i in 0 until idx) {
+                                    updatedItems.add(siblingItems[i])
+                                }
+                            } else {
+                                updatedItems.add(fullItem)
+                            }
+                        } else {
+                            updatedItems.add(fullItem)
+                        }
+                    } else {
+                        updatedItems.add(fullItem)
+                    }
+                }
+            } else {
+                for (item in mediaItems) {
+                    if (item.mediaId.startsWith("[FOLDER_]") || item.mediaId.startsWith("[EXP_DIR_]")) {
+                        collectSongsRecursively(item.mediaId, updatedItems)
+                    } else {
+                        val fullItem = MediaItemTree.getItem(item.mediaId) ?: item
+                        updatedItems.add(fullItem)
+                    }
                 }
             }
+            android.util.Log.d("GravityMusic", "onAddMediaItems: returning size = ${updatedItems.size}")
             return Futures.immediateFuture(updatedItems)
         }
 
